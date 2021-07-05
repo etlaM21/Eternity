@@ -3,8 +3,8 @@
 #include "Brush.h"
 
 Brush::Brush() {
-	size = 20;
-	hairs = 10;
+	size = 7.5;
+	hairs = 25;
 	maxStrokes = 100;
 	strokeStyle = Stroke();
 }
@@ -21,15 +21,38 @@ Brush::Brush() {
 void  Brush::updateStrokes() {
 	if (strokes.size() > 0) {
 		for (int i = 0; i < strokes.size(); i++) {
-			strokes[i].update();
+			for (int o = 0; o < strokes[i].size(); o++) {
+				strokes[i][o].update();
+			}
 		}
 	}
 }
 
-void Brush::paint(int x, int y) {
+void Brush::paint(glm::vec2 paintPos, float pressure) {
+	// x = location.x;
+	// y = location.y;
+	float pressureSize = size * (pressure + 0.1);
 	if (strokes.size() > 0) {
-		for (int i = 0; i < strokes.size(); i++) {
-			strokes[i].addStrokePoint(x, y);
+		if (glm::distance(paintPos, lastLocation) > 5) { // Else OF crashes because it looks for the same point in memory or something
+			// 5 as threshold seems to be a good mix for a smooth looking and still fast drawing stroke
+			lastLocation = paintPos;
+			int n = hairs / 2 - 1;
+			// Outer Circle
+			for (int i = 0; i < hairs / 2; i++)
+			{
+				float circle_x = pressureSize * sin((2 * PI * i) / n) + paintPos.x;
+				float circle_y = pressureSize * cos((2 * PI * i) / n) + paintPos.y;
+				strokes[strokes.size() - 1][i].addStrokePoint(circle_x, circle_y);
+			}
+			// Inner Circle
+			for (int i = hairs / 2; i < hairs - 1; i++)
+			{
+				float circle_x = pressureSize / 2 * sin((2 * PI * i) / n) + paintPos.x;
+				float circle_y = pressureSize / 2 * cos((2 * PI * i) / n) + paintPos.y;
+				strokes[strokes.size() - 1][i].addStrokePoint(circle_x, circle_y);
+			}
+			// Midpoint
+			strokes[strokes.size() - 1][hairs].addStrokePoint(paintPos.x, paintPos.y);
 		}
 	}
 }
@@ -37,101 +60,26 @@ void Brush::paint(int x, int y) {
 void  Brush::drawStrokes() {
 	if (strokes.size() > 0) {
 		for (int i = 0; i < strokes.size(); i++) {
-			strokes[i].draw();
+			for (int o = 0; o < strokes[i].size(); o++) {
+				strokes[i][o].draw();
+			}
 		}
 	}
 }
 
-void Brush::addStroke() {
-	strokes.push_back(Stroke());
-}
-void  Brush::cleanStroke() {
-	
-}
-
-void Brush::applyForce(glm::vec2 force) {
-	acceleration += force;
-}
-
-void Brush::seek(glm::vec2 target) {
-	glm::vec2 desired = target - location;
-	desired = glm::normalize(desired);
-	float distance = glm::distance(location, target);
-	if (distance < slowDownThreshhold) {
-		desired *= ofMap(distance, 0, slowDownThreshhold, 0, maxSpeed);
+void Brush::addStroke(ofColor strokeColor) {
+	std::vector<Stroke> newStroke;
+	for (int i = 0; i <= hairs; i++) {
+		newStroke.push_back(Stroke(strokeStyle.radius, strokeColor, strokeStyle.fadeAwayTime, strokeStyle.driftAmount));
 	}
-	else {
-		desired *= maxSpeed;
-	}
-	desired += (ofNoise(location) * 2 - 1) * noiseInfluence;
-	glm::vec2 steer = desired - velocity;
-	cout << (ofNoise(location) * 2 - 1) * noiseInfluence << endl;
-	// Limit
-	if (glm::length(steer) > maxForce) {
-		steer = glm::normalize(steer) * maxForce;
-	}
-	applyForce(steer);
+	strokes.push_back(newStroke);
 }
-
-bool Brush::targetHit() {
-	if (glm::distance(location, target) < hitRadius) {
-		return true;
+void  Brush::cleanStrokes() {
+	if (! strokes[0][0].visible) {
+		for (int i = 0; i < strokes[0].size(); i++) {
+			strokes[0][i].clean();
+		}
+		strokes.erase(strokes.begin());
+		std::cout << "Removed stroke, new size = " << strokes.size() << endl;
 	}
-	return false;
-}
-
-void Brush::setupAgent() {
-	acceleration = { 0, 0 };
-	velocity = { 0, 0 };
-	location = { 10, 50 };
-	target = { 500, 500 };
-	maxSpeed = 6;
-	maxForce = 0.5;
-	slowDownThreshhold = 100;
-	noiseInfluence = 1;
-	hitRadius = 5.0;
-}
-
-void Brush::updateAgent() {
-	seek(target);
-	velocity += acceleration;
-	// Limit
-	if (glm::length(velocity) > maxSpeed) {
-		velocity = glm::normalize(velocity) * maxSpeed;
-	}
-	location += velocity;
-	acceleration *= 0;
-	if (targetHit()) {
-		location = { ofRandom(0, ofGetWidth()), ofRandom(0, ofGetHeight()) };
-		target = { ofRandom(0, ofGetWidth()), ofRandom(0, ofGetHeight()) };
-		velocity = { ofRandom(0, 50) - 25, ofRandom(0, 50) - 25 };
-	}
-
-	maxSpeed = ofMap(ofGetMouseX(), 0, ofGetWidth(), 0, 10);
-	maxForce = ofMap(ofGetMouseY(), 0, ofGetHeight(), 0, 2);
-}
-
-void Brush::drawAgent() {
-	ofSetColor(0, 0, 255);
-	ofFill();
-	ofDrawCircle(location, 10);
-	ofSetColor(0, 255, 0);
-	ofFill();
-	ofDrawCircle(target, 10);
-	ofSetColor(120, 255, 100);
-	std::string speedStr = "MaxSpeed = ";
-	speedStr += ofToString(maxSpeed);
-	ofDrawBitmapString(speedStr, 10, 25);
-	std::string forceStr = "MaxForce = ";
-	forceStr += ofToString(maxForce);
-	ofDrawBitmapString(forceStr, 10, 50);
-	std::string thresholdStr = "SlowDownThreshhold = ";
-	thresholdStr += ofToString(slowDownThreshhold);
-	ofDrawBitmapString(thresholdStr, 10, 75);
-	std::string noiseInfluenceStr = "NoiseInfluence = ";
-	noiseInfluenceStr += ofToString(noiseInfluence);
-	ofDrawBitmapString(noiseInfluenceStr, 10, 100);
-	std::string hitRadiusStr = "HitRadius = ";
-	hitRadiusStr += ofToString(hitRadius);
-	ofDrawBitmapString(hitRadiusStr, 10, 125);
 }

@@ -3,6 +3,7 @@
 #include "ofMain.h"
 #include "Brush.h"
 #include "Stroke.h"
+#include "Painter.h"
 
 class ofApp : public ofBaseApp{
 
@@ -24,4 +25,11 @@ class ofApp : public ofBaseApp{
 		void gotMessage(ofMessage msg);
 
 		Brush brush;
+		Painter opa;
+		Painter oma;
+
+		ofFbo canvas01;
+		ofFbo canvas02;
+
+		ofShader shader;
 };
